@@ -93,10 +93,44 @@ module GW2API
       call_multi(pages)
     end
 
+    def page(page, page_size = @max_page_size)
+      raise InvalidEndpointMethodError, "'page' cannot be used on endpoint '#{@url}'" unless @paginated
+
+      raise InvalidEndpointMethodError,
+            "page_size must be between 1 and #{@max_page_size} (#{@url})" if page_size <= 0 || page_size < @max_page_size
+
+      raise InvalidEndpointMethodError,
+            "page must be 0 or greater (#{@url})" if page <= 0
+
+      call('page': page, 'page_size': page_size)
+    end
+
+    # Fetch all of the endpoint's data.
+    def all
+      raise InvalidEndpointMethodError, "'all' cannot be used on endpoint '#{@url}'" unless @bulk || @paginated
+
+      if @bulk_all
+        return call('ids': 'all')
+      end
+
+      first_page = fetch('page': 0, 'page_size': @max_page_size)
+      total_pages = first_page.headers['x-page-total'].to_i
+      first_page = JSON.parse(first_page.body, object_class: OpenStruct)
+      remaining_pages = []
+      puts total_pages
+      if total_pages > 1
+        page_params = (1..total_pages).map do |page|
+          { 'page': page, 'page_size': @max_page_size }
+        end
+        remaining_pages = call_multi(page_params)
+      end
+      [first_page, remaining_pages].flatten
+    end
+
     private
 
     # Perform the actual HTTP request with the URI params given.
-    def call(params = {})
+    def fetch(params = {})
       full_uri = "#{@base_url}#{@url}"
       params['access_token'] = @client.api_key if @authenticated
       request = ::Typhoeus::Request.new(
@@ -104,7 +138,11 @@ module GW2API
         method: :get,
         params: params
       )
-      response = request.run
+      request.run
+    end
+
+    def call(params = {})
+      response = fetch(params)
 
       if response.code == 200 || response.code == 206
         return JSON.parse(response.body, object_class: OpenStruct)

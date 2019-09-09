@@ -9,13 +9,20 @@ module GW2API
   # This is the main interface through which the rest of the gem is used.
   class Client
     attr_reader :api_key
+    attr_reader :locale
 
     def initialize
       @api_key = nil
+      @locale = 'en'
     end
 
     def authenticate(key)
       @api_key = key
+      self
+    end
+
+    def lang(locale)
+      @locale = locale
       self
     end
 
@@ -133,6 +140,7 @@ module GW2API
     def fetch(params = {})
       full_uri = "#{@base_url}#{@url}"
       params['access_token'] = @client.api_key if @authenticated
+      params['lang'] = @client.locale if @localized
       request = ::Typhoeus::Request.new(
         full_uri,
         method: :get,
@@ -160,6 +168,7 @@ module GW2API
       hydra = ::Typhoeus::Hydra.hydra
       requests = params.map do |page|
         page['access_token'] = @client.api_key if @authenticated
+        page['lang'] = @client.locale if @localized
         request = ::Typhoeus::Request.new(
           full_uri,
           method: :get,
